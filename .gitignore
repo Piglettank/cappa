@@ -1,0 +1,18 @@
+# macOS / Xcode
+.DS_Store
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# Windows / .NET
+bin/
+obj/
+.vs/
+*.user
+AppPackages/
+
+# FFmpeg, downloaded by the first Windows build
+windows/tools/
+
+# Krita source of the logo (kept locally, not in the repo)
+*.kra

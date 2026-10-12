@@ -1,0 +1,66 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <UseWPF>true</UseWPF>
+    <!-- Only for the tray icon (NotifyIcon) and monitor info (Screen). -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Cappa</RootNamespace>
+    <AssemblyName>Cappa</AssemblyName>
+    <Version>0.1.0</Version>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\cappa.ico</ApplicationIcon>
+    <Platforms>x64;ARM64</Platforms>
+    <Platform Condition="'$(Platform)' == '' Or '$(Platform)' == 'AnyCPU'">x64</Platform>
+    <PlatformTarget>$(Platform)</PlatformTarget>
+    <!-- Lets the project be compiled (not run) on macOS/Linux for quick checks. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <!-- WPF needs DPI awareness in the manifest; this WinForms analyzer warning doesn't apply. -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ScreenRecorderLib" Version="6.6.0" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\cappa.ico" />
+  </ItemGroup>
+
+  <!--
+    FFmpeg does the editing, export, GIFs, thumbnails and the final audio/video mux.
+    It is downloaded once into windows/tools/ffmpeg on the first Windows build (not committed to git)
+    and copied next to Cappa.exe. To use your own copy, put ffmpeg.exe and ffprobe.exe in that folder.
+  -->
+  <PropertyGroup>
+    <FfmpegDir>$(MSBuildProjectDirectory)\..\tools\ffmpeg</FfmpegDir>
+    <FfmpegZipUrl>https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip</FfmpegZipUrl>
+  </PropertyGroup>
+
+  <Target Name="DownloadFfmpeg" BeforeTargets="Build" Condition="'$(OS)' == 'Windows_NT' And !Exists('$(FfmpegDir)\ffmpeg.exe')">
+    <Message Importance="high" Text="Cappa: downloading FFmpeg (first build only, about 100 MB)..." />
+    <DownloadFile SourceUrl="$(FfmpegZipUrl)" DestinationFolder="$(FfmpegDir)\download" DestinationFileName="ffmpeg.zip" />
+    <Unzip SourceFiles="$(FfmpegDir)\download\ffmpeg.zip" DestinationFolder="$(FfmpegDir)\download\extracted" />
+    <ItemGroup>
+      <_CappaFfmpegBinaries Include="$(FfmpegDir)\download\extracted\*\bin\ffmpeg.exe;$(FfmpegDir)\download\extracted\*\bin\ffprobe.exe" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_CappaFfmpegBinaries)" DestinationFolder="$(FfmpegDir)" />
+    <RemoveDir Directories="$(FfmpegDir)\download" />
+    <Error Condition="!Exists('$(FfmpegDir)\ffmpeg.exe')" Text="Cappa: FFmpeg download failed. Put ffmpeg.exe and ffprobe.exe in $(FfmpegDir) and build again." />
+  </Target>
+
+  <Target Name="CopyFfmpegToOutput" AfterTargets="Build" Condition="Exists('$(FfmpegDir)\ffmpeg.exe')">
+    <Copy SourceFiles="$(FfmpegDir)\ffmpeg.exe;$(FfmpegDir)\ffprobe.exe" DestinationFolder="$(OutDir)ffmpeg" SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyFfmpegToPublish" AfterTargets="Publish" Condition="Exists('$(FfmpegDir)\ffmpeg.exe')">
+    <Copy SourceFiles="$(FfmpegDir)\ffmpeg.exe;$(FfmpegDir)\ffprobe.exe" DestinationFolder="$(PublishDir)ffmpeg" SkipUnchangedFiles="true" />
+  </Target>
+
+</Project>

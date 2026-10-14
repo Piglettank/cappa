@@ -1,0 +1,21 @@
+[Desktop Entry]
+Type=Application
+Name=Cappa
+GenericName=Screen Recorder
+Comment=Record your screen and trim the result
+Exec=cappa %F
+Icon=dev.fallberg.Cappa
+Terminal=false
+Categories=AudioVideo;Video;Recorder;
+Keywords=screen;record;recorder;screencast;capture;video;editor;
+MimeType=video/mp4;video/quicktime;video/x-matroska;video/webm;
+StartupNotify=false
+Actions=Record;Settings;
+
+[Desktop Action Record]
+Name=Record
+Exec=cappa --toggle
+
+[Desktop Action Settings]
+Name=Settings
+Exec=cappa --settings

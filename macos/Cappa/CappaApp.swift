@@ -40,9 +40,8 @@ private struct MenuContent: View {
     var body: some View {
         switch controller.state {
         case .idle:
-            Button("Record Region…") { Task { await controller.startRegionRecording() } }
+            Button("Record…") { Task { await controller.startRegionRecording() } }
                 .keyboardShortcut("r", modifiers: [.command, .option, .shift])
-            Button("Record Screen") { Task { await controller.startDisplayRecording() } }
         case .selecting:
             Button("Cancel Selection") { Task { await controller.toggleRecording() } }
         case .starting:

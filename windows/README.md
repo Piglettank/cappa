@@ -35,8 +35,8 @@ dotnet publish Cappa\Cappa.csproj -c Release -p:Platform=x64 -r win-x64 --self-c
 ## Using it
 - Cappa starts in the **notification area** (click the `^` in the taskbar if the icon is hidden; you can drag
   it out to keep it visible). Left- or right-click it for the menu.
-- **Record Region…** or **Ctrl+Alt+Shift+R**: drag the area to record. A click records the whole monitor, and
-  Esc cancels. **Record Screen** records the monitor under the mouse.
+- **Record…** or **Ctrl+Alt+Shift+R**: drag the area to record (hold Shift for a square). A click records the
+  whole monitor, and Esc cancels.
 - While recording: a floating pill with the timer, **Pause** and **Stop**. It's draggable and never shows up in
   the video. A red dashed outline marks a recorded region. Ctrl+Alt+Shift+R also stops.
 - When you stop, the recording opens in the **editor**:
@@ -44,8 +44,8 @@ dotnet publish Cappa\Cappa.csproj -c Release -p:Platform=x64 -r win-x64 --self-c
     **Space** plays and pauses; **Ctrl+Z** / **Ctrl+Y** undo and redo
   - each audio track (Computer Audio, Microphone) has its own lane with a mute button and a volume slider
   - **Export**: Save as Video (**Ctrl+E**), Copy to Clipboard (**Ctrl+Shift+C**), Save as GIF (**Ctrl+Shift+E**)
-- **Settings…** (tray menu): system audio and microphone on/off, which microphone, and where recordings are
-  saved (default `Videos\Cappa`).
+- **Settings…** (tray menu): start Cappa when Windows starts (default off), system audio and microphone on/off, which microphone, video quality and frame
+  rate, cursor and click highlighting, and where recordings are saved (default `Videos\Cappa`).
 
 ## How it's built
 | Piece | Library / API | Files |

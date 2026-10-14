@@ -48,9 +48,22 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 struct SettingsView: View {
     @ObservedObject var controller: RecordingController
     @StateObject private var microphones = MicrophoneList()
+    @StateObject private var launchAtLogin = LaunchAtLogin()
 
     var body: some View {
         Form {
+            Section("General") {
+                Toggle(isOn: Binding(get: { launchAtLogin.isEnabled }, set: { launchAtLogin.setEnabled($0) })) {
+                    Text("Open at login")
+                    if launchAtLogin.needsApproval {
+                        Text("Allow Cappa in System Settings → General → Login Items.")
+                    }
+                }
+                if launchAtLogin.needsApproval {
+                    Button("Open Login Items…") { launchAtLogin.openLoginItemsSettings() }
+                }
+            }
+
             Section("Audio") {
                 Toggle(isOn: $controller.captureSystemAudio) {
                     Text("Record system audio")
@@ -79,6 +92,29 @@ struct SettingsView: View {
                     }
                 }
                 .disabled(!controller.captureMicrophone || !ScreenRecorder.supportsMicrophone)
+            }
+
+            Section("Video") {
+                Picker(selection: $controller.quality) {
+                    ForEach(RecordingQuality.allCases) { Text($0.title).tag($0) }
+                } label: {
+                    Text("Quality")
+                    Text("Lower quality makes smaller files.")
+                }
+                .pickerStyle(.segmented)
+
+                Picker("Frame rate", selection: $controller.frameRate) {
+                    Text("30 fps").tag(30)
+                    Text("60 fps").tag(60)
+                }
+
+                Toggle("Show cursor", isOn: $controller.showCursor)
+
+                Toggle(isOn: $controller.highlightClicks) {
+                    Text("Highlight clicks")
+                    Text("Shows a splash effect where you click.")
+                }
+                .disabled(!controller.showCursor)
             }
 
             Section("Recordings") {
@@ -110,6 +146,10 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .frame(width: 480)
         .fixedSize(horizontal: false, vertical: true)
+        // The user may have changed it in System Settings meanwhile.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            launchAtLogin.refresh()
+        }
     }
 
     private func chooseFolder() {

@@ -3,8 +3,12 @@ using System.ComponentModel;
 using System.IO;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace Cappa.Services;
+
+/// <summary>Video quality for new recordings: trades file size for sharpness.</summary>
+internal enum RecordingQuality { Low, Medium, High }
 
 /// <summary>User settings, saved as JSON in %APPDATA%\Cappa\settings.json whenever one changes.</summary>
 internal sealed class AppSettings : INotifyPropertyChanged
@@ -20,8 +24,10 @@ internal sealed class AppSettings : INotifyPropertyChanged
     private string _microphoneId = "";
     private string _recordingsFolder = DefaultRecordingsFolder;
     private bool _showOverlay = true;
-    private double? _overlayLeft;
-    private double? _overlayTop;
+    private RecordingQuality _quality = RecordingQuality.High;
+    private int _frameRate = 60;
+    private bool _showCursor = true;
+    private bool _highlightClicks;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -31,8 +37,12 @@ internal sealed class AppSettings : INotifyPropertyChanged
     public string MicrophoneId { get => _microphoneId; set => Set(ref _microphoneId, value ?? ""); }
     public string RecordingsFolder { get => _recordingsFolder; set => Set(ref _recordingsFolder, value); }
     public bool ShowOverlay { get => _showOverlay; set => Set(ref _showOverlay, value); }
-    public double? OverlayLeft { get => _overlayLeft; set => Set(ref _overlayLeft, value); }
-    public double? OverlayTop { get => _overlayTop; set => Set(ref _overlayTop, value); }
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public RecordingQuality Quality { get => _quality; set => Set(ref _quality, value); }
+    /// <summary>30 or 60.</summary>
+    public int FrameRate { get => _frameRate; set => Set(ref _frameRate, value == 30 ? 30 : 60); }
+    public bool ShowCursor { get => _showCursor; set => Set(ref _showCursor, value); }
+    public bool HighlightClicks { get => _highlightClicks; set => Set(ref _highlightClicks, value); }
 
     public static AppSettings Load()
     {

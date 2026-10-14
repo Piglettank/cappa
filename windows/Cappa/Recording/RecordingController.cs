@@ -7,7 +7,6 @@ using System.Windows.Threading;
 using Cappa.Editor;
 using Cappa.Services;
 using Cappa.UI;
-using WinForms = System.Windows.Forms;
 
 namespace Cappa.Recording;
 
@@ -20,8 +19,10 @@ internal sealed class RecordingController
     private readonly DispatcherTimer _timer;
     private readonly Stopwatch _elapsed = new();
     private RecordingSession? _session;
+    private CaptureTarget? _target;
     private RecordingOverlay? _overlay;
     private RegionFrame? _regionFrame;
+    private ClickHighlighter? _clickHighlighter;
 
     public AppSettings Settings { get; }
     public RecordingState State { get; private set; } = RecordingState.Idle;
@@ -60,14 +61,6 @@ internal sealed class RecordingController
         var target = await _regionSelector.SelectAsync();
         SetState(RecordingState.Idle);
         if (target is not null) await BeginRecordingAsync(target);
-    }
-
-    /// <summary>Records the whole monitor under the mouse pointer.</summary>
-    public async Task StartScreenRecordingAsync()
-    {
-        if (State != RecordingState.Idle) return;
-        var screen = WinForms.Screen.FromPoint(WinForms.Cursor.Position);
-        await BeginRecordingAsync(new CaptureTarget(screen.DeviceName, screen.Bounds, null));
     }
 
     public void TogglePause()
@@ -113,6 +106,7 @@ internal sealed class RecordingController
         {
             session.Dispose();
             _session = null;
+            _target = null;
             SetState(RecordingState.Idle);
         }
     }
@@ -142,6 +136,7 @@ internal sealed class RecordingController
             var session = await RecordingSession.StartAsync(target, Settings);
             session.Failed += error => Application.Current.Dispatcher.InvokeAsync(() => OnSessionFailed(error));
             _session = session;
+            _target = target;
             _elapsed.Restart();
             _timer.Start();
             SetState(RecordingState.Recording);
@@ -150,6 +145,11 @@ internal sealed class RecordingController
             {
                 _regionFrame = new RegionFrame(target.ScreenArea);
                 _regionFrame.Show();
+            }
+            if (Settings.ShowCursor && Settings.HighlightClicks)
+            {
+                _clickHighlighter = new ClickHighlighter(target.MonitorBounds);
+                _clickHighlighter.Show();
             }
         }
         catch (Exception e)
@@ -169,9 +169,9 @@ internal sealed class RecordingController
 
     private void UpdateOverlay()
     {
-        if (IsActive && Settings.ShowOverlay)
+        if (IsActive && Settings.ShowOverlay && _target is { } target)
         {
-            _overlay ??= new RecordingOverlay(this);
+            _overlay ??= new RecordingOverlay(this, target);
             _overlay.Update(State, Elapsed);
             _overlay.Show();
         }
@@ -188,6 +188,8 @@ internal sealed class RecordingController
         _overlay = null;
         _regionFrame?.Close();
         _regionFrame = null;
+        _clickHighlighter?.Close();
+        _clickHighlighter = null;
     }
 
     private void SetState(RecordingState state)

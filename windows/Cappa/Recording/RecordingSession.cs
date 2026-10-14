@@ -23,20 +23,21 @@ internal sealed class RecordingSession : IDisposable
     /// <summary>Raised (on a background thread) when capture fails mid-recording.</summary>
     public event Action<string>? Failed;
 
-    private RecordingSession(CaptureTarget target, bool recordSystemAudio, bool recordMicrophone, string? microphoneId)
+    private RecordingSession(CaptureTarget target, AppSettings settings)
     {
         Target = target;
         _workFolder = AppPaths.TempFolder("Recording-" + Guid.NewGuid().ToString("N"));
-        _screen = new ScreenCapture(target);
+        _screen = new ScreenCapture(target, settings);
         _screen.Failed += error => Failed?.Invoke(error);
-        if (recordSystemAudio) _systemAudio = AudioTrackRecorder.SystemAudio(Path.Combine(_workFolder, "system.wav"));
-        if (recordMicrophone) _microphone = AudioTrackRecorder.Microphone(microphoneId, Path.Combine(_workFolder, "microphone.wav"));
+        if (settings.RecordSystemAudio) _systemAudio = AudioTrackRecorder.SystemAudio(Path.Combine(_workFolder, "system.wav"));
+        if (settings.RecordMicrophone) _microphone = AudioTrackRecorder.Microphone(settings.MicrophoneId, Path.Combine(_workFolder, "microphone.wav"));
     }
 
     public static async Task<RecordingSession> StartAsync(CaptureTarget target, AppSettings settings)
     {
-        Log.Write($"Starting recording of {target.DeviceName}, area {target.ScreenArea}, system audio {settings.RecordSystemAudio}, mic {settings.RecordMicrophone}");
-        var session = new RecordingSession(target, settings.RecordSystemAudio, settings.RecordMicrophone, settings.MicrophoneId);
+        Log.Write($"Starting recording of {target.DeviceName}, area {target.ScreenArea}, system audio {settings.RecordSystemAudio}, mic {settings.RecordMicrophone}, " +
+            $"quality {settings.Quality}, {settings.FrameRate} fps, cursor {settings.ShowCursor}, click highlight {settings.HighlightClicks}");
+        var session = new RecordingSession(target, settings);
         try
         {
             await session._screen.StartAsync(Path.Combine(session._workFolder, "video.mp4"));

@@ -28,13 +28,13 @@ internal sealed class ScreenCapture : IDisposable
     /// <summary>Raised (on a background thread) if recording fails after it started.</summary>
     public event Action<string>? Failed;
 
-    public ScreenCapture(CaptureTarget target)
+    public ScreenCapture(CaptureTarget target, AppSettings settings)
     {
         var source = new DisplayRecordingSource(target.DeviceName)
         {
             RecorderApi = RecorderApi.WindowsGraphicsCapture,
             IsBorderRequired = false,
-            IsCursorCaptureEnabled = true,
+            IsCursorCaptureEnabled = settings.ShowCursor,
         };
         if (target.Region is { } region)
         {
@@ -55,11 +55,18 @@ internal sealed class ScreenCapture : IDisposable
             {
                 IsAudioEnabled = false,
             },
+            // Click highlights are drawn by UI/ClickHighlighter, which looks nicer than the library's dot.
+            MouseOptions = new MouseOptions { IsMousePointerEnabled = settings.ShowCursor },
             VideoEncoderOptions = new VideoEncoderOptions
             {
                 Encoder = new H264VideoEncoder { BitrateMode = H264BitrateControlMode.Quality },
-                Quality = 80,
-                Framerate = 60,
+                Quality = settings.Quality switch
+                {
+                    RecordingQuality.Low => 50,
+                    RecordingQuality.Medium => 65,
+                    _ => 80,
+                },
+                Framerate = settings.FrameRate,
                 IsFixedFramerate = false,
                 IsHardwareEncodingEnabled = true,
             },

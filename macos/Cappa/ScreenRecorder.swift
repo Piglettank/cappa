@@ -15,6 +15,33 @@ enum RecorderError: LocalizedError {
     }
 }
 
+/// Video quality for new recordings: trades file size for sharpness.
+enum RecordingQuality: String, CaseIterable, Identifiable {
+    case low, medium, high
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .low: return "Low"
+        case .medium: return "Medium"
+        case .high: return "High"
+        }
+    }
+
+    /// Average bitrate for a video of this size and frame rate.
+    func bitRate(width: Int, height: Int, frameRate: Int) -> Int {
+        let bitsPerPixel: Int
+        switch self {
+        case .low: bitsPerPixel = 1
+        case .medium: bitsPerPixel = 2
+        case .high: bitsPerPixel = 4
+        }
+        // Tuned at 60 fps; fewer frames need proportionally fewer bits.
+        return width * height * bitsPerPixel * frameRate / 60
+    }
+}
+
 /// Captures one display with ScreenCaptureKit and writes it to an MP4 file with AVAssetWriter.
 ///
 /// All sample handling and pause bookkeeping happens on `queue`; the stream and writer are only
@@ -44,13 +71,19 @@ final class ScreenRecorder: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
 
     /// - Parameters:
     ///   - sourceRect: Display-local area in points (top-left origin) to record, or `nil` for the whole display.
+    ///   - frameRate: Maximum frames per second; ScreenCaptureKit only delivers frames when the screen changes.
+    ///   - includingWindows: Windows of the excluded apps to record anyway, such as the click highlight.
     ///   - captureMicrophone: Records a microphone to its own audio track (macOS 15+).
     ///   - microphoneID: `AVCaptureDevice.uniqueID` of the microphone, or `nil` for the system default input.
     func start(
         display: SCDisplay,
         sourceRect: CGRect?,
         excludingApplications apps: [SCRunningApplication],
+        includingWindows windows: [SCWindow],
         scale: CGFloat,
+        quality: RecordingQuality,
+        frameRate: Int,
+        showsCursor: Bool,
         captureAudio: Bool,
         captureMicrophone: Bool,
         microphoneID: String?,
@@ -61,7 +94,7 @@ final class ScreenRecorder: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         let width = max(Int(captureSize.width * scale) & ~1, 2)
         let height = max(Int(captureSize.height * scale) & ~1, 2)
 
-        let filter = SCContentFilter(display: display, excludingApplications: apps, exceptingWindows: [])
+        let filter = SCContentFilter(display: display, excludingApplications: apps, exceptingWindows: windows)
 
         let config = SCStreamConfiguration()
         if let sourceRect {
@@ -69,9 +102,9 @@ final class ScreenRecorder: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
         }
         config.width = width
         config.height = height
-        config.minimumFrameInterval = CMTime(value: 1, timescale: 60)
+        config.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(frameRate))
         config.pixelFormat = kCVPixelFormatType_32BGRA
-        config.showsCursor = true
+        config.showsCursor = showsCursor
         config.queueDepth = 6
         if captureAudio {
             config.capturesAudio = true
@@ -94,8 +127,8 @@ final class ScreenRecorder: NSObject, SCStreamOutput, SCStreamDelegate, @uncheck
             AVVideoWidthKey: width,
             AVVideoHeightKey: height,
             AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: width * height * 4,
-                AVVideoExpectedSourceFrameRateKey: 60,
+                AVVideoAverageBitRateKey: quality.bitRate(width: width, height: height, frameRate: frameRate),
+                AVVideoExpectedSourceFrameRateKey: frameRate,
             ],
         ])
         videoInput.expectsMediaDataInRealTime = true

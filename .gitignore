@@ -16,3 +16,6 @@ windows/tools/
 
 # Krita source of the logo (kept locally, not in the repo)
 *.kra
+
+# Linux / Rust
+linux/target/

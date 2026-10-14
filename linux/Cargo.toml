@@ -1,0 +1,36 @@
+[package]
+name = "cappa"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "A lightweight screen recorder with a built-in video editor"
+publish = false
+
+[dependencies]
+gtk = { package = "gtk4", version = "0.11", features = ["v4_12"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_4"] }
+gdk-x11 = { package = "gdk4-x11", version = "0.11" }
+gst = { package = "gstreamer", version = "0.25" }
+gst-video = { package = "gstreamer-video", version = "0.25" }
+# The video sink for the editor's preview, built in so no extra system package is needed.
+gstgtk4 = { package = "gst-plugin-gtk4", version = "0.15", features = ["gtk_v4_12"] }
+# Desktop portals: screen capture on Wayland and the global shortcut. "async-io" runs them on GLib's main loop.
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "screencast", "global_shortcuts"] }
+# The tray icon (StatusNotifierItem).
+ksni = { version = "0.3", default-features = false, features = ["async-io", "blocking"] }
+# X11: the global hotkey, window placement and click detection.
+x11rb = "0.13"
+gtk4-layer-shell = { version = "0.8", optional = true }
+anyhow = "1"
+async-channel = "2"
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[features]
+# Places the recording controls and region outline on Wayland compositors with wlr-layer-shell
+# (KDE Plasma, Sway, Hyprland…). Needs the gtk4-layer-shell library. GNOME doesn't support it.
+layer-shell = ["dep:gtk4-layer-shell"]
+
+[profile.release]
+lto = "thin"

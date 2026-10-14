@@ -11,7 +11,7 @@ namespace Cappa.UI;
 
 internal sealed record MicrophoneOption(string Id, string Name);
 
-/// <summary>Settings: system audio and microphone, which microphone, and where recordings are saved.</summary>
+/// <summary>Settings: start Cappa when Windows starts, system audio and microphone, which microphone, video options, and where recordings are saved.</summary>
 internal partial class SettingsWindow : Window
 {
     private static SettingsWindow? _shared;
@@ -30,6 +30,11 @@ internal partial class SettingsWindow : Window
         _settings = settings;
         InitializeComponent();
 
+        AutostartCheck.Click += (_, _) =>
+        {
+            Autostart.IsEnabled = AutostartCheck.IsChecked == true;
+            AutostartCheck.IsChecked = Autostart.IsEnabled;
+        };
         SystemAudioCheck.Click += (_, _) => _settings.RecordSystemAudio = SystemAudioCheck.IsChecked == true;
         MicrophoneCheck.Click += (_, _) => _settings.RecordMicrophone = MicrophoneCheck.IsChecked == true;
         MicrophoneCombo.SelectionChanged += (_, _) =>
@@ -37,9 +42,25 @@ internal partial class SettingsWindow : Window
             if (!_updating && MicrophoneCombo.SelectedValue is string id) _settings.MicrophoneId = id;
         };
 
+        QualityCombo.SelectionChanged += (_, _) =>
+        {
+            if (!_updating && Enum.TryParse<RecordingQuality>(QualityCombo.SelectedValue as string, out var quality)) _settings.Quality = quality;
+        };
+        FrameRateCombo.SelectionChanged += (_, _) =>
+        {
+            if (!_updating && int.TryParse(FrameRateCombo.SelectedValue as string, out var fps)) _settings.FrameRate = fps;
+        };
+        ShowCursorCheck.Click += (_, _) => _settings.ShowCursor = ShowCursorCheck.IsChecked == true;
+        HighlightClicksCheck.Click += (_, _) => _settings.HighlightClicks = HighlightClicksCheck.IsChecked == true;
+
         _settings.PropertyChanged += OnSettingChanged;
         // Devices come and go; refresh the list whenever the window is brought forward.
-        Activated += (_, _) => RefreshMicrophones();
+        // The user may also have changed autostart in Task Manager meanwhile.
+        Activated += (_, _) =>
+        {
+            RefreshMicrophones();
+            AutostartCheck.IsChecked = Autostart.IsEnabled;
+        };
         Closed += (_, _) =>
         {
             _settings.PropertyChanged -= OnSettingChanged;
@@ -57,6 +78,11 @@ internal partial class SettingsWindow : Window
         MicrophoneCheck.IsChecked = _settings.RecordMicrophone;
         MicrophoneCombo.IsEnabled = _settings.RecordMicrophone;
         MicrophoneCombo.SelectedValue = _settings.MicrophoneId;
+        QualityCombo.SelectedValue = _settings.Quality.ToString();
+        FrameRateCombo.SelectedValue = _settings.FrameRate.ToString();
+        ShowCursorCheck.IsChecked = _settings.ShowCursor;
+        HighlightClicksCheck.IsChecked = _settings.HighlightClicks;
+        HighlightClicksCheck.IsEnabled = _settings.ShowCursor;
         FolderText.Text = _settings.RecordingsFolder;
         DefaultFolderButton.IsEnabled = !string.Equals(
             Path.GetFullPath(_settings.RecordingsFolder), Path.GetFullPath(AppSettings.DefaultRecordingsFolder),

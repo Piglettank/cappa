@@ -17,6 +17,32 @@ final class OverlayPanelController {
         panel.orderFrontRegardless()
     }
 
+    /// Puts the panel next to what's being recorded: centred below a region in the top half of the screen,
+    /// above one in the bottom half, and near the top centre of the screen for a full-screen recording.
+    func place(displayID: CGDirectDisplayID, region: CGRect?) {
+        let panel = self.panel ?? makePanel()
+        self.panel = panel
+        guard let screen = NSScreen.screens.first(where: { $0.displayID == displayID }) ?? NSScreen.main else { return }
+
+        let visible = screen.visibleFrame
+        let size = panel.frame.size
+        var origin: NSPoint
+        if let region {
+            let isInTopHalf = region.midY > screen.frame.midY // AppKit's y axis points up
+            origin = NSPoint(
+                x: region.midX - size.width / 2,
+                y: isInTopHalf ? region.minY - Self.regionGap - size.height : region.maxY + Self.regionGap
+            )
+        } else {
+            origin = NSPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - Self.screenTopMargin)
+        }
+        // A region filling most of the screen leaves no room outside it; the panel then overlaps the region,
+        // which is fine since it never shows up in the video.
+        origin.x = min(max(origin.x, visible.minX + Self.edgeMargin), visible.maxX - size.width - Self.edgeMargin)
+        origin.y = min(max(origin.y, visible.minY + Self.edgeMargin), visible.maxY - size.height - Self.edgeMargin)
+        panel.setFrameOrigin(origin)
+    }
+
     func hide() {
         panel?.orderOut(nil)
     }
@@ -40,17 +66,13 @@ final class OverlayPanelController {
         panel.backgroundColor = .clear
         panel.isOpaque = false
         panel.hasShadow = true
-
-        // Default to top-centre of the main screen; after that, AppKit remembers where it was dragged.
-        if !panel.setFrameUsingName(Self.autosaveName), let screen = NSScreen.main {
-            let visible = screen.visibleFrame
-            panel.setFrameOrigin(NSPoint(x: visible.midX - size.width / 2, y: visible.maxY - size.height - 12))
-        }
-        panel.setFrameAutosaveName(Self.autosaveName)
         return panel
     }
 
-    private static let autosaveName = "CappaRecordingOverlay"
+    /// Space between the panel and the recorded region (whose red outline sits 3 pt outside it).
+    private static let regionGap: CGFloat = 12
+    private static let screenTopMargin: CGFloat = 40
+    private static let edgeMargin: CGFloat = 8
 }
 
 private final class OverlayPanel: NSPanel {

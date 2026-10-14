@@ -53,11 +53,10 @@ internal sealed class TrayIcon : IDisposable
         switch (_controller.State)
         {
             case RecordingState.Idle:
-                var region = Item("Record Region…", async () => await _controller.StartRegionRecordingAsync());
-                region.ShortcutKeyDisplayString = "Ctrl+Alt+Shift+R";
-                region.Font = new Font(region.Font, System.Drawing.FontStyle.Bold);
-                _menu.Items.Add(region);
-                _menu.Items.Add(Item("Record Screen", async () => await _controller.StartScreenRecordingAsync()));
+                var record = Item("Record…", async () => await _controller.StartRegionRecordingAsync());
+                record.ShortcutKeyDisplayString = "Ctrl+Alt+Shift+R";
+                record.Font = new Font(record.Font, System.Drawing.FontStyle.Bold);
+                _menu.Items.Add(record);
                 break;
             case RecordingState.Selecting:
                 _menu.Items.Add(Item("Cancel Selection", async () => await _controller.ToggleRecordingAsync()));

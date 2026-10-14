@@ -10,7 +10,7 @@ struct RegionSelection {
 }
 
 /// Dims every screen and lets the user drag out the area to record.
-/// Click without dragging picks the whole screen; Esc cancels.
+/// Click without dragging picks the whole screen; holding Shift keeps the area square; Esc cancels.
 @MainActor
 final class RegionSelector {
     private var windows: [SelectionWindow] = []
@@ -118,6 +118,7 @@ private final class RegionSelectionView: NSView {
     private static let minimumSize: CGFloat = 8
 
     private var dragStart: NSPoint?
+    private var dragPoint: NSPoint?
     private var selection: NSRect? {
         didSet { needsDisplay = true }
     }
@@ -127,6 +128,7 @@ private final class RegionSelectionView: NSView {
 
     func clearSelection() {
         dragStart = nil
+        dragPoint = nil
         selection = nil
     }
 
@@ -135,23 +137,48 @@ private final class RegionSelectionView: NSView {
         window?.makeFirstResponder(self)
         onBegin?()
         dragStart = clamped(convert(event.locationInWindow, from: nil))
+        dragPoint = nil
         selection = nil
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let dragStart else { return }
-        let point = clamped(convert(event.locationInWindow, from: nil))
+        guard dragStart != nil else { return }
+        dragPoint = clamped(convert(event.locationInWindow, from: nil))
+        updateSelection(square: event.modifierFlags.contains(.shift))
+    }
+
+    override func flagsChanged(with event: NSEvent) {
+        // Pressing or releasing Shift mid-drag reshapes the selection without waiting for the mouse to move.
+        guard dragPoint != nil else { return super.flagsChanged(with: event) }
+        updateSelection(square: event.modifierFlags.contains(.shift))
+    }
+
+    private func updateSelection(square: Bool) {
+        guard let dragStart, let dragPoint else { return }
+        var width = abs(dragPoint.x - dragStart.x)
+        var height = abs(dragPoint.y - dragStart.y)
+        let growsRight = dragPoint.x >= dragStart.x
+        let growsUp = dragPoint.y >= dragStart.y
+        if square {
+            // Follow the longer side, but stop at the screen edge in the direction of the drag.
+            let roomX = growsRight ? bounds.maxX - dragStart.x : dragStart.x - bounds.minX
+            let roomY = growsUp ? bounds.maxY - dragStart.y : dragStart.y - bounds.minY
+            let side = min(max(width, height), roomX, roomY)
+            width = side
+            height = side
+        }
         selection = NSRect(
-            x: min(dragStart.x, point.x),
-            y: min(dragStart.y, point.y),
-            width: abs(point.x - dragStart.x),
-            height: abs(point.y - dragStart.y)
+            x: growsRight ? dragStart.x : dragStart.x - width,
+            y: growsUp ? dragStart.y : dragStart.y - height,
+            width: width,
+            height: height
         )
     }
 
     override func mouseUp(with event: NSEvent) {
         guard dragStart != nil else { return }
         dragStart = nil
+        dragPoint = nil
         if let selection, selection.width >= Self.minimumSize, selection.height >= Self.minimumSize {
             onComplete?(selection.integral)
         } else {
@@ -210,7 +237,7 @@ private final class RegionSelectionView: NSView {
         paragraph.alignment = .center
         paragraph.lineSpacing = 4
         let text = NSAttributedString(
-            string: "Drag to select the area to record\nClick to record the whole screen · Esc to cancel",
+            string: "Drag to select the area to record · Hold Shift for a square\nClick to record the whole screen · Esc to cancel",
             attributes: [
                 .font: NSFont.systemFont(ofSize: 15, weight: .medium),
                 .foregroundColor: NSColor.white,
@@ -230,8 +257,9 @@ private final class RegionSelectionView: NSView {
         text.draw(in: background.insetBy(dx: padding.width, dy: padding.height))
     }
 
+    /// Whole points, so a square selection stays square after `integral`.
     private func clamped(_ point: NSPoint) -> NSPoint {
-        NSPoint(x: min(max(point.x, bounds.minX), bounds.maxX), y: min(max(point.y, bounds.minY), bounds.maxY))
+        NSPoint(x: min(max(point.x.rounded(), bounds.minX), bounds.maxX), y: min(max(point.y.rounded(), bounds.minY), bounds.maxY))
     }
 }
 

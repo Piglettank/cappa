@@ -19,6 +19,12 @@
     </Window.Resources>
 
     <StackPanel Margin="20">
+        <TextBlock Text="General" Style="{StaticResource SectionHeader}" />
+
+        <CheckBox x:Name="AutostartCheck" Content="Start Cappa when Windows starts" />
+
+        <Separator Margin="0,16" />
+
         <TextBlock Text="Audio" Style="{StaticResource SectionHeader}" />
 
         <CheckBox x:Name="SystemAudioCheck" Content="Record system audio" />
@@ -35,6 +41,39 @@
             <TextBlock Text="Microphone:" VerticalAlignment="Center" Margin="0,0,10,0" />
             <ComboBox x:Name="MicrophoneCombo" Grid.Column="1" DisplayMemberPath="Name" SelectedValuePath="Id" />
         </Grid>
+
+        <Separator Margin="0,16" />
+
+        <TextBlock Text="Video" Style="{StaticResource SectionHeader}" />
+
+        <Grid Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <TextBlock Text="Quality:" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <ComboBox x:Name="QualityCombo" Grid.Column="1" SelectedValuePath="Tag">
+                <ComboBoxItem Content="Low" Tag="Low" />
+                <ComboBoxItem Content="Medium" Tag="Medium" />
+                <ComboBoxItem Content="High" Tag="High" />
+            </ComboBox>
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="Lower quality makes smaller files." Style="{StaticResource Hint}" Margin="0,2,0,8" />
+            <TextBlock Grid.Row="2" Text="Frame rate:" VerticalAlignment="Center" Margin="0,0,10,0" />
+            <ComboBox x:Name="FrameRateCombo" Grid.Row="2" Grid.Column="1" SelectedValuePath="Tag">
+                <ComboBoxItem Content="30 fps" Tag="30" />
+                <ComboBoxItem Content="60 fps" Tag="60" />
+            </ComboBox>
+        </Grid>
+
+        <CheckBox x:Name="ShowCursorCheck" Content="Show cursor" Margin="0,10,0,10" />
+
+        <CheckBox x:Name="HighlightClicksCheck" Content="Highlight clicks" />
+        <TextBlock Text="Shows a splash effect where you click." Style="{StaticResource Hint}" />
 
         <Separator Margin="0,16" />
 

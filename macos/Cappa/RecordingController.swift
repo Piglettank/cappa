@@ -24,6 +24,19 @@ final class RecordingController: ObservableObject {
     @Published var recordingsFolder: URL {
         didSet { UserDefaults.standard.set(recordingsFolder.path, forKey: "recordingsFolder") }
     }
+    @Published var quality: RecordingQuality {
+        didSet { UserDefaults.standard.set(quality.rawValue, forKey: "quality") }
+    }
+    /// 30 or 60.
+    @Published var frameRate: Int {
+        didSet { UserDefaults.standard.set(frameRate, forKey: "frameRate") }
+    }
+    @Published var showCursor: Bool {
+        didSet { UserDefaults.standard.set(showCursor, forKey: "showCursor") }
+    }
+    @Published var highlightClicks: Bool {
+        didSet { UserDefaults.standard.set(highlightClicks, forKey: "highlightClicks") }
+    }
     @Published var showOverlay: Bool {
         didSet {
             UserDefaults.standard.set(showOverlay, forKey: "showOverlay")
@@ -41,14 +54,22 @@ final class RecordingController: ObservableObject {
     private lazy var overlay = OverlayPanelController(controller: self)
     private let regionSelector = RegionSelector()
     private var regionFrame: RegionFrameWindow?
+    private var clickHighlighter: ClickHighlighter?
 
     init() {
-        UserDefaults.standard.register(defaults: ["captureSystemAudio": true, "captureMicrophone": false, "showOverlay": true])
+        UserDefaults.standard.register(defaults: [
+            "captureSystemAudio": true, "captureMicrophone": false, "showOverlay": true,
+            "frameRate": 60, "showCursor": true, "highlightClicks": false,
+        ])
         captureSystemAudio = UserDefaults.standard.bool(forKey: "captureSystemAudio")
         captureMicrophone = UserDefaults.standard.bool(forKey: "captureMicrophone")
         microphoneID = UserDefaults.standard.string(forKey: "microphoneID") ?? ""
         recordingsFolder = UserDefaults.standard.string(forKey: "recordingsFolder")
             .map { URL(fileURLWithPath: $0, isDirectory: true) } ?? Self.defaultRecordingsFolder
+        quality = UserDefaults.standard.string(forKey: "quality").flatMap(RecordingQuality.init) ?? .high
+        frameRate = UserDefaults.standard.integer(forKey: "frameRate") == 30 ? 30 : 60
+        showCursor = UserDefaults.standard.bool(forKey: "showCursor")
+        highlightClicks = UserDefaults.standard.bool(forKey: "highlightClicks")
         showOverlay = UserDefaults.standard.bool(forKey: "showOverlay")
     }
 
@@ -79,21 +100,22 @@ final class RecordingController: ObservableObject {
         await beginRecording(displayID: selection.displayID, sourceRect: selection.sourceRect, screenRect: selection.screenRect)
     }
 
-    func startDisplayRecording() async {
-        guard state == .idle else { return }
-        guard await ensurePermissions() else { return }
-        await beginRecording(displayID: Self.displayIDUnderMouse(), sourceRect: nil, screenRect: nil)
-    }
-
     private func beginRecording(displayID: CGDirectDisplayID, sourceRect: CGRect?, screenRect: CGRect?) async {
         state = .starting
+        // The click highlight must be on screen before asking for shareable content, so its window is listed.
+        if showCursor, highlightClicks, let screen = NSScreen.screens.first(where: { $0.displayID == displayID }) {
+            clickHighlighter = ClickHighlighter(screen: screen)
+            clickHighlighter?.show()
+        }
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
             guard let display = content.displays.first(where: { $0.displayID == displayID }) else {
                 throw RecorderError.noDisplay
             }
-            // Excluding our own app keeps the overlay (and any future Cappa windows) out of the video.
+            // Excluding our own app keeps the overlay (and any future Cappa windows) out of the video;
+            // the click highlight is the one Cappa window that belongs in it.
             let ownApps = content.applications.filter { $0.bundleIdentifier == Bundle.main.bundleIdentifier }
+            let recordedWindows = content.windows.filter { $0.windowID == clickHighlighter?.windowID }
 
             try FileManager.default.createDirectory(at: recordingsFolder, withIntermediateDirectories: true)
             let url = recordingsFolder.appendingPathComponent(Self.fileName())
@@ -106,7 +128,11 @@ final class RecordingController: ObservableObject {
                 display: display,
                 sourceRect: sourceRect,
                 excludingApplications: ownApps,
+                includingWindows: recordedWindows,
                 scale: Self.backingScale(for: display),
+                quality: quality,
+                frameRate: frameRate,
+                showsCursor: showCursor,
                 captureAudio: captureSystemAudio,
                 captureMicrophone: captureMicrophone,
                 // A remembered microphone that isn't plugged in falls back to the default input.
@@ -121,12 +147,15 @@ final class RecordingController: ObservableObject {
             elapsed = 0
             state = .recording
             startTimer()
+            overlay.place(displayID: displayID, region: screenRect)
             updateOverlayVisibility()
             if let screenRect {
                 regionFrame = RegionFrameWindow(screenRect: screenRect)
                 regionFrame?.show()
             }
         } catch {
+            clickHighlighter?.close()
+            clickHighlighter = nil
             state = .idle
             showError("Couldn't start recording", error)
         }
@@ -156,6 +185,8 @@ final class RecordingController: ObservableObject {
         overlay.hide()
         regionFrame?.close()
         regionFrame = nil
+        clickHighlighter?.close()
+        clickHighlighter = nil
 
         do {
             try await recorder.stop()
@@ -264,12 +295,6 @@ final class RecordingController: ObservableObject {
         alert.alertStyle = .warning
         NSApp.activate(ignoringOtherApps: true)
         alert.runModal()
-    }
-
-    private static func displayIDUnderMouse() -> CGDirectDisplayID {
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.frame, false) }
-        return screen?.displayID ?? CGMainDisplayID()
     }
 
     private static func backingScale(for display: SCDisplay) -> CGFloat {

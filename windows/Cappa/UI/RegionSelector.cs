@@ -15,7 +15,7 @@ namespace Cappa.UI;
 
 /// <summary>
 /// Dims every monitor and lets the user drag out the area to record. A click without dragging picks the
-/// whole monitor; Esc cancels. The selection stays on the monitor where the drag started.
+/// whole monitor; holding Shift keeps the area square; Esc cancels. The selection stays on the monitor where the drag started.
 /// </summary>
 internal sealed class RegionSelector
 {
@@ -66,6 +66,7 @@ internal sealed class SelectionWindow : Window
     private readonly System.Drawing.Rectangle _monitorBounds;
     private readonly SelectionSurface _surface = new();
     private Point? _dragStart;
+    private Point? _dragPoint;
 
     public event Action? Began;
     /// <summary>The selected area in pixels relative to the monitor, or null for the whole monitor.</summary>
@@ -102,12 +103,19 @@ internal sealed class SelectionWindow : Window
         KeyDown += (_, e) =>
         {
             if (e.Key == Key.Escape) Cancelled?.Invoke();
+            else if (e.Key is Key.LeftShift or Key.RightShift) UpdateSelection();
+        };
+        // Pressing or releasing Shift mid-drag reshapes the selection without waiting for the mouse to move.
+        KeyUp += (_, e) =>
+        {
+            if (e.Key is Key.LeftShift or Key.RightShift) UpdateSelection();
         };
     }
 
     public void ClearSelection()
     {
         _dragStart = null;
+        _dragPoint = null;
         _surface.Selection = null;
         _surface.IsDragging = false;
     }
@@ -117,6 +125,7 @@ internal sealed class SelectionWindow : Window
         Activate();
         Began?.Invoke();
         _dragStart = Clamp(e.GetPosition(_surface));
+        _dragPoint = null;
         _surface.Selection = null;
         _surface.IsDragging = true;
         CaptureMouse();
@@ -124,15 +133,36 @@ internal sealed class SelectionWindow : Window
 
     private void OnMouseMove(object sender, MouseEventArgs e)
     {
-        if (_dragStart is not { } start) return;
-        var point = Clamp(e.GetPosition(_surface));
-        _surface.Selection = new Rect(start, point);
+        if (_dragStart is null) return;
+        _dragPoint = Clamp(e.GetPosition(_surface));
+        UpdateSelection();
+    }
+
+    private void UpdateSelection()
+    {
+        if (_dragStart is not { } start || _dragPoint is not { } point) return;
+        if ((Keyboard.Modifiers & ModifierKeys.Shift) == 0)
+        {
+            _surface.Selection = new Rect(start, point);
+            return;
+        }
+        // Follow the longer side, but stop at the screen edge in the direction of the drag.
+        var growsRight = point.X >= start.X;
+        var growsDown = point.Y >= start.Y;
+        var roomX = growsRight ? _surface.ActualWidth - start.X : start.X;
+        var roomY = growsDown ? _surface.ActualHeight - start.Y : start.Y;
+        var side = Math.Min(Math.Max(Math.Abs(point.X - start.X), Math.Abs(point.Y - start.Y)), Math.Min(roomX, roomY));
+        _surface.Selection = new Rect(
+            growsRight ? start.X : start.X - side,
+            growsDown ? start.Y : start.Y - side,
+            side, side);
     }
 
     private void OnMouseUp(object sender, MouseButtonEventArgs e)
     {
         if (_dragStart is null) return;
         _dragStart = null;
+        _dragPoint = null;
         ReleaseMouseCapture();
 
         if (_surface.Selection is { Width: >= MinimumSize, Height: >= MinimumSize } selection)
@@ -216,7 +246,7 @@ internal sealed class SelectionSurface : FrameworkElement
 
     private void DrawHint(DrawingContext context, Rect bounds)
     {
-        var text = Text("Drag to select the area to record\nClick to record the whole screen · Esc to cancel", 16);
+        var text = Text("Drag to select the area to record · Hold Shift for a square\nClick to record the whole screen · Esc to cancel", 16);
         text.TextAlignment = TextAlignment.Center;
         var size = new Size(text.Width + 40, text.Height + 28);
         var box = new Rect(bounds.Width / 2 - size.Width / 2, bounds.Height / 2 - size.Height / 2, size.Width, size.Height);

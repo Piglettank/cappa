@@ -5,23 +5,32 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using Cappa.Native;
 using Cappa.Recording;
+using WinForms = System.Windows.Forms;
 
 namespace Cappa.UI;
 
 /// <summary>
 /// The floating, always-on-top recording controls: status dot, elapsed time, pause/resume and stop.
-/// Draggable, remembers its position, and excluded from capture so it never appears in the video.
+/// Starts next to what's being recorded, can be dragged away, and is excluded from capture so it never
+/// appears in the video.
 /// </summary>
 internal partial class RecordingOverlay : Window
 {
     private static readonly Brush RecordingBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x3B, 0x30));
     private static readonly Brush PausedBrush = new SolidColorBrush(Color.FromRgb(0xFF, 0x9F, 0x0A));
 
-    private readonly RecordingController _controller;
+    // In DIPs.
+    private const double RegionGap = 12; // the region's red outline sits 3 px outside it
+    private const double ScreenTopMargin = 40;
+    private const double EdgeMargin = 8;
 
-    public RecordingOverlay(RecordingController controller)
+    private readonly RecordingController _controller;
+    private readonly CaptureTarget _target;
+
+    public RecordingOverlay(RecordingController controller, CaptureTarget target)
     {
         _controller = controller;
+        _target = target;
         InitializeComponent();
 
         SourceInitialized += (_, _) =>
@@ -30,15 +39,9 @@ internal partial class RecordingOverlay : Window
             Win32.AddExtendedStyle(hwnd, Win32.WS_EX_TOOLWINDOW | Win32.WS_EX_NOACTIVATE);
             Win32.ExcludeFromCapture(hwnd);
         };
-        Loaded += (_, _) => PlaceInitially();
-        LocationChanged += (_, _) =>
-        {
-            if (IsLoaded)
-            {
-                _controller.Settings.OverlayLeft = Left;
-                _controller.Settings.OverlayTop = Top;
-            }
-        };
+        Loaded += (_, _) => Place();
+        // Moving onto a monitor with a different scale resizes the window, so place it again at its new size.
+        DpiChanged += (_, _) => Dispatcher.InvokeAsync(Place);
     }
 
     public void Update(RecordingState state, TimeSpan elapsed)
@@ -50,23 +53,40 @@ internal partial class RecordingOverlay : Window
         ElapsedText.Text = elapsed.TotalHours >= 1 ? elapsed.ToString(@"h\:mm\:ss") : elapsed.ToString(@"mm\:ss");
     }
 
-    private void PlaceInitially()
+    /// <summary>
+    /// Centres the controls below a region in the top half of the monitor, above one in the bottom half, and
+    /// near the top of the monitor for a full-screen recording. Works in pixels, like the capture target.
+    /// </summary>
+    private void Place()
     {
-        var settings = _controller.Settings;
-        var area = SystemParameters.WorkArea;
-        if (settings.OverlayLeft is { } left && settings.OverlayTop is { } top
-            && left >= SystemParameters.VirtualScreenLeft && top >= SystemParameters.VirtualScreenTop
-            && left < SystemParameters.VirtualScreenLeft + SystemParameters.VirtualScreenWidth - 40
-            && top < SystemParameters.VirtualScreenTop + SystemParameters.VirtualScreenHeight - 20)
+        var hwnd = new WindowInteropHelper(this).Handle;
+        if (hwnd == IntPtr.Zero || !Win32.GetWindowRect(hwnd, out var rect)) return;
+        var width = rect.Right - rect.Left;
+        var height = rect.Bottom - rect.Top;
+        var scale = VisualTreeHelper.GetDpi(this).DpiScaleY;
+        int Px(double dips) => (int)Math.Round(dips * scale);
+
+        var monitor = _target.MonitorBounds;
+        var work = WinForms.Screen.FromRectangle(monitor).WorkingArea;
+        int x, y;
+        if (_target.Region is null)
         {
-            Left = left;
-            Top = top;
+            x = work.Left + (work.Width - width) / 2;
+            y = work.Top + Px(ScreenTopMargin);
         }
         else
         {
-            Left = area.Left + (area.Width - ActualWidth) / 2;
-            Top = area.Top + 12;
+            var area = _target.ScreenArea;
+            var isInTopHalf = area.Top + area.Height / 2 < monitor.Top + monitor.Height / 2;
+            x = area.Left + (area.Width - width) / 2;
+            y = isInTopHalf ? area.Bottom + Px(RegionGap) : area.Top - Px(RegionGap) - height;
         }
+        // A region filling most of the monitor leaves no room outside it; the controls then overlap the
+        // region, which is fine since they never show up in the video.
+        var margin = Px(EdgeMargin);
+        x = Math.Clamp(x, work.Left + margin, Math.Max(work.Left + margin, work.Right - width - margin));
+        y = Math.Clamp(y, work.Top + margin, Math.Max(work.Top + margin, work.Bottom - height - margin));
+        Win32.SetWindowPos(hwnd, IntPtr.Zero, x, y, 0, 0, Win32.SWP_NOSIZE | Win32.SWP_NOZORDER | Win32.SWP_NOACTIVATE);
     }
 
     private void OnDrag(object sender, MouseButtonEventArgs e)
